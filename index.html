@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Private Chat Room</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: Arial, sans-serif;
+        }
+
+        body {
+            background: #f0f2f5;
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 1000px;
+            height: 90vh;
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .login-container {
+            width: 100%;
+            height: 100%;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .login-form {
+            width: 100%;
+            max-width: 400px;
+            padding: 20px;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .login-form h2 {
+            text-align: center;
+            margin-bottom: 20px;
+            color: #1a73e8;
+        }
+
+        .form-group {
+            margin-bottom: 15px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+            color: #666;
+        }
+
+        .form-group input {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 16px;
+        }
+
+        .btn {
+            width: 100%;
+            padding: 12px;
+            background: #1a73e8;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            font-size: 16px;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+
+        .btn:hover {
+            background: #1557b0;
+        }
+
+        .chat-container {
+            display: none;
+            height: 100%;
+            flex-direction: column;
+        }
+
+        .chat-header {
+            padding: 15px;
+            background: #1a73e8;
+            color: white;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .chat-messages {
+            flex-grow: 1;
+            padding: 20px;
+            overflow-y: auto;
+        }
+
+        .message {
+            margin-bottom: 15px;
+            max-width: 70%;
+        }
+
+        .message.received {
+            margin-right: auto;
+        }
+
+        .message.sent {
+            margin-left: auto;
+        }
+
+        .message-content {
+            padding: 10px 15px;
+            border-radius: 15px;
+            background: #e3f2fd;
+            color: #333;
+        }
+
+        .message.sent .message-content {
+            background: #1a73e8;
+            color: white;
+        }
+
+        .chat-input {
+            padding: 20px;
+            background: #f8f9fa;
+            display: flex;
+            gap: 10px;
+        }
+
+        .chat-input input {
+            flex-grow: 1;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 20px;
+            font-size: 16px;
+        }
+
+        .chat-input button {
+            padding: 10px 20px;
+            background: #1a73e8;
+            color: white;
+            border: none;
+            border-radius: 20px;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+
+        .chat-input button:hover {
+            background: #1557b0;
+        }
+
+        .header-buttons {
+            display: flex;
+            gap: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="login-container" id="loginContainer">
+            <div class="login-form">
+                <h2>Welcome to Private Chat</h2>
+                <div class="form-group">
+                    <label for="username">Username</label>
+                    <input type="text" id="username" placeholder="Enter your username">
+                </div>
+                <div class="form-group">
+                    <label for="room">Room ID</label>
+                    <input type="text" id="room" placeholder="Enter room ID">
+                </div>
+                <button class="btn" onclick="joinChat()">Join Chat</button>
+            </div>
+        </div>
+
+        <div class="chat-container" id="chatContainer">
+            <div class="chat-header">
+                <h3>Room: <span id="roomDisplay"></span></h3>
+                <div class="header-buttons">
+                    <button class="btn" onclick="shareRoom()">Share Room</button>
+                    <button class="btn" onclick="leaveChat()">Leave</button>
+                </div>
+            </div>
+            <div class="chat-messages" id="chatMessages"></div>
+            <div class="chat-input">
+                <input type="text" id="messageInput" placeholder="Type your message..." onkeypress="handleKeyPress(event)">
+                <button onclick="sendMessage()">Send</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+        let socket;
+        let currentUser;
+        let currentRoom;
+
+        // Check URL parameters on page load
+        window.onload = function() {
+            const urlParams = new URLSearchParams(window.location.search);
+            const roomId = urlParams.get('room');
+            if (roomId) {
+                document.getElementById('room').value = roomId;
+                // Auto-focus username field when room is pre-filled
+                document.getElementById('username').focus();
+            }
+        };
+
+        function shareRoom() {
+            const url = new URL(window.location.href.split('?')[0]);
+            url.searchParams.set('room', currentRoom);
+            const shareLink = url.toString();
+            
+            // Try to use the Share API if available, fallback to clipboard
+            if (navigator.share) {
+                navigator.share({
+                    title: 'Join my chat room',
+                    text: `Join my private chat room: ${currentRoom}`,
+                    url: shareLink
+                }).catch(() => copyToClipboard(shareLink));
+            } else {
+                copyToClipboard(shareLink);
+            }
+        }
+
+        function copyToClipboard(text) {
+            navigator.clipboard.writeText(text)
+                .then(() => alert('Room link copied to clipboard! Share it with others to join.'))
+                .catch(() => {
+                    // Fallback for clipboard API failure
+                    const textArea = document.createElement('textarea');
+                    textArea.value = text;
+                    document.body.appendChild(textArea);
+                    textArea.select();
+                    try {
+                        document.execCommand('copy');
+                        alert('Room link copied to clipboard! Share it with others to join.');
+                    } catch (err) {
+                        alert('Failed to copy room link: ' + text);
+                    }
+                    document.body.removeChild(textArea);
+                });
+        }
+
+        function joinChat() {
+            const username = document.getElementById('username').value.trim();
+            const room = document.getElementById('room').value.trim();
+
+            if (!username || !room) {
+                alert('Please enter both username and room ID');
+                return;
+            }
+
+            currentUser = username;
+            currentRoom = room;
+
+            // Connect to WebSocket server
+            socket = io();
+
+            // Join room
+            socket.emit('join', { username, room });
+
+            // Listen for messages
+            socket.on('message', (data) => {
+                addMessage(data.username, data.message, data.username === currentUser);
+            });
+
+            // Show chat container and hide login
+            document.getElementById('loginContainer').style.display = 'none';
+            document.getElementById('chatContainer').style.display = 'flex';
+            document.getElementById('roomDisplay').textContent = room;
+        }
+
+        function leaveChat() {
+            if (socket) {
+                socket.disconnect();
+            }
+            document.getElementById('loginContainer').style.display = 'flex';
+            document.getElementById('chatContainer').style.display = 'none';
+            document.getElementById('chatMessages').innerHTML = '';
+            document.getElementById('username').value = '';
+            document.getElementById('room').value = '';
+        }
+
+        function sendMessage() {
+            const messageInput = document.getElementById('messageInput');
+            const message = messageInput.value.trim();
+
+            if (message && socket) {
+                socket.emit('chatMessage', {
+                    room: currentRoom,
+                    username: currentUser,
+                    message: message
+                });
+                messageInput.value = '';
+            }
+        }
+
+        function handleKeyPress(event) {
+            if (event.key === 'Enter') {
+                sendMessage();
+            }
+        }
+
+        function addMessage(username, message, isSent) {
+            const chatMessages = document.getElementById('chatMessages');
+            const messageElement = document.createElement('div');
+            messageElement.className = `message ${isSent ? 'sent' : 'received'}`;
+            
+            const content = document.createElement('div');
+            content.className = 'message-content';
+            content.textContent = `${isSent ? '' : username + ': '}${message}`;
+            
+            messageElement.appendChild(content);
+            chatMessages.appendChild(messageElement);
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
+    </script>
+</body>
+</html>
