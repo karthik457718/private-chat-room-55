@@ -1,7 +1,9 @@
-const express = require('express');
+
 const http = require('http');
 const socketIO = require('socket.io');
 const path = require('path');
+// Add the missing Express import
+express = require('express');
 
 const app = express();
 const server = http.createServer(app);
